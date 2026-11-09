@@ -389,3 +389,18 @@ a.dt-btn, a.dt-btn:hover { text-decoration: none; }
 .dt-jira-table { overflow-x: auto; }
 .dt-jira-table .dt-table { min-width: 660px; }
 .dt-jira-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+.dt-route { display: flex; flex-direction: column; gap: 14px; }
+.dt-route-group { display: flex; flex-direction: column; gap: 8px; }
+.dt-route-label { font-size: 12px; line-height: 18px; font-weight: 600; color: var(--dsw-alias-label-caption); }
+.dt-route-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.dt-route-node { box-sizing: border-box; max-width: 280px; min-width: 0; padding: 8px 10px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 12px; background: transparent; display: flex; flex-direction: column; gap: 2px; }
+.dt-route-node[data-kind='worker'] { border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 55%, var(--dsw-alias-border-l3)); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 10%, transparent); }
+.dt-route-node[data-current='true'] { box-shadow: inset 0 0 0 1.5px var(--dsw-alias-brand-primary); }
+.dt-route-node-title { margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; line-height: 18px; font-weight: 500; text-align: left; cursor: pointer; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; max-width: 260px; white-space: normal; }
+.dt-route-node-sub { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+.dt-route-arrow { display: inline-flex; align-items: center; gap: 4px; flex: none; max-width: 240px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); }
+.dt-route-arrow[data-kind='fanout'], .dt-route-arrow[data-kind='accept'], .dt-route-arrow[data-kind='reopen'] { color: var(--dsw-alias-state-success-primary); }
+.dt-route-arrow[data-kind='handback'] { color: var(--dsw-alias-state-warn-primary); }
+.dt-route-arrow[data-kind='context'] { color: var(--dsw-alias-label-tertiary); }
+.dt-route-arrow i { display: inline-block; width: 16px; border-top: 1.5px solid currentColor; }
+.dt-route-arrow[data-dashed='true'] i { border-top-style: dashed; }

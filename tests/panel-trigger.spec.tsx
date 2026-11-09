@@ -4,7 +4,7 @@ import { act } from 'react'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
 import { usePanel, mount, remount, settle, all, find, click, text, at } from './fixtures/panel.tsx'
-import { server, trigger, threadSummary, ticketSummary } from './fixtures/panel-server.ts'
+import { emptyRouting, server, trigger, threadSummary, ticketSummary } from './fixtures/panel-server.ts'
 
 usePanel()
 it('walks a Thread timeline newest first with dispositions as tags and its Decisions, requeues a filtered Trigger, pages backwards and returns', async () => {
@@ -53,6 +53,7 @@ it('folds consecutive automated messages from one sender on a Thread, showing th
   const bot = (id: string, at: string) => trigger(id, at, { actor: { source: 'github', id: '' }, human: false,
     text: `CI of PR #42 at abc1234: 3 checks, 0 failed, ${id === 'b3' ? 0 : 1} running.`, preview: `CI ${id}` })
   server.threadPages = () => ({ ...threadSummary(), tickets: [], correlated: [], decisions: [], earlier: null, context: [],
+    routing: emptyRouting(),
     timeline: [bot('b1', '2026-09-23T00:00:00Z'), bot('b2', '2026-09-23T00:01:00Z'), trigger('h1', '2026-09-23T00:02:00Z'), bot('b3',
       '2026-09-23T00:03:00Z'), bot('b4', '2026-09-23T00:04:00Z')] })
   await mount()
@@ -77,7 +78,7 @@ it('reads the page around a link\'s target once, also for a Trigger the Thread d
 
 it('shows a follow-up delivered to its Ticket without an Eval, a hand-back with why, and a Ticket that follows the Thread for context', async () => {
   server.threadPages = () => ({ ...threadSummary(), tickets: [ticketSummary(), ticketSummary({ id: 't2', title: '相关工单' })],
-    correlated: [], decisions: [], earlier: null, context: ['t2'], url: undefined,
+    correlated: [], decisions: [], earlier: null, context: ['t2'], url: undefined, routing: emptyRouting(),
     timeline: [trigger('f1', '2026-09-23T00:00:00Z', { disposition: { delivered: true, fanout: ['t1'] } }),
       trigger('f2', '2026-09-23T00:01:00Z', { disposition: { queued: true, fanout: ['t1'], handbacks: [{ ticketId: 't1', title: '修复回归',
         reason: 'Asks for a new page', at: '2026-09-23T00:02:00Z' }] } })] })
@@ -105,14 +106,43 @@ function busyThread(count: number) {
     const end = around ? thread.triggers.find(item => item.id === around)?.at : undefined
     const kept = thread.triggers.filter(item => end ? item.at <= end : !before || item.at < before)
     const timeline = kept.slice(-50)
-    return { ...threadSummary(), tickets: [], correlated: [], decisions: [], context: [], url: undefined, timeline,
-      earlier: kept.length > 50 ? timeline[0]!.at : null }
+    return { ...threadSummary(), tickets: [], correlated: [], decisions: [], context: [], url: undefined, routing: emptyRouting(),
+      timeline, earlier: kept.length > 50 ? timeline[0]!.at : null }
   }
   return thread
 }
 /** The Triggers the timeline shows, oldest first, by their number. */
 const shown = () => all('.dt-event .dt-event-text').map(item => Number(item.textContent!.replace('message m', ''))).reverse()
 const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n)
+
+it('draws subscription passthrough for the thread, including every subscribed ticket', async () => {
+  const routing = emptyRouting()
+  server.threadPages = () => ({ ...threadSummary(), tickets: [ticketSummary(), ticketSummary({ id: 't2', title: '写工单' })],
+    correlated: [], decisions: [], earlier: null, context: [], url: undefined, timeline: [],
+    routing: { ...routing, multiTicket: true, threads: [{ key: threadSummary().key, source: 'feishu', title: threadSummary().title, subscriptions: 2 }],
+      nodes: [
+        { id: 'trigger:f3', kind: 'trigger', role: 'feedback', triggerId: 'f3', at: '2026-11-09T16:00:00.000Z', preview: '合并到dev',
+          actor: { source: 'feishu', id: 'ou_alice', name: { zh: 'Alice', en: 'Alice' } }, human: true, thread: threadSummary().key },
+        { id: 'worker:A', kind: 'worker', ticketId: 't1', title: '修复回归', work: '排查生产问题', workFrom: 'scope', focus: false, context: false,
+          createdAt: '2026-09-22T00:00:00.000Z', state: 'open', ended: undefined, stage: 'working' },
+        { id: 'worker:B', kind: 'worker', ticketId: 't2', title: '写工单', work: '写代码改仓库', workFrom: 'scope', focus: false, context: false,
+          createdAt: '2026-11-06T15:10:00.000Z', state: 'open', ended: undefined, stage: 'working' },
+      ],
+      edges: [
+        { id: 'e8', kind: 'fanout', from: 'trigger:f3', to: 'worker:A', triggerId: 'f3', ticketId: 't1' },
+        { id: 'e9', kind: 'fanout', from: 'trigger:f3', to: 'worker:B', triggerId: 'f3', ticketId: 't2' },
+      ] } })
+  at({ page: 'trigger', id: threadSummary().key })
+  await mount()
+  expect(text()).toContain(zh.routingFeedback)
+  expect(text()).toContain(zh.routingPassthrough)
+  expect(text()).toContain('合并到dev')
+  expect(text()).toContain(zh.routingMulti)
+  expect(text()).toContain('排查生产问题')
+  expect(text()).toContain('写代码改仓库')
+  await click('排查生产问题')
+  expect(server.requests.some(request => request.path === 'tickets/t1')).toBe(true)
+})
 
 it('reads back the Triggers between the newest page and the earlier ones it shows, once more arrive than a page holds', async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true })

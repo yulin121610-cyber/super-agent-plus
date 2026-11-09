@@ -3,6 +3,7 @@ import { liveTicket, threadKey, ticketStage, type AcceptMode, type AdmissionCell
   type TicketStage } from '../../core/index.ts'
 import { workerSessionId } from '../../executor/dsh.ts'
 import type { Store } from '../store.ts'
+import { callGraph } from './call-graph.ts'
 import { channelLink, decisionView, newestFirst, page, snapshot, threadSummary, ticketLine, type Snapshot,
   type ViewHost } from './records.ts'
 import { markdown, preview } from './text.ts'
@@ -82,6 +83,8 @@ export function ticketDetail(host: ViewHost, id: string) {
     inputs: ticket.inputs.slice().reverse().map(input),
     // Threads followed for context only (e.g., related issues) grant no authority and are marked with `context: true`.
     threads: view.threadsOf(id).map(thread => ({ ...threadSummary(view, thread),
-      ...thread.context?.includes(id) ? { context: true as const } : {} })) }
+      ...thread.context?.includes(id) ? { context: true as const } : {} })),
+    // Read on each request, so the page's poll redraws the route as Triggers and dispositions change.
+    routing: callGraph(view, { ticketId: id }) }
 }
 export type TicketDetailView = NonNullable<ReturnType<typeof ticketDetail>>

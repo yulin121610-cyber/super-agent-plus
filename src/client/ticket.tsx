@@ -1,10 +1,11 @@
-/** Ticket detail page: stage and actions, Mandate details, undelivered/delivered Inputs, subscribed Threads, and Assignments. */
+/** Ticket detail page: stage and actions, the live routing graph, Mandate details, Inputs, subscribed Threads, and Assignments. */
 import { useState, type ReactNode } from 'react'
 import { ApiError, usePoll, type TicketPageView } from './api.ts'
 import { DisclosureRow, Dot, Icon, Tag, type IconName } from './controls.tsx'
 import { decisionMark, reportDot, ticketMark } from './marks.ts'
 import { usePanel } from './provider.tsx'
 import { settingsRoute } from './route.ts'
+import { RoutingGraph } from './call-graph.tsx'
 import { JiraTicketSync } from './jira.tsx'
 import { Earlier, ThreadLine, automatedRuns } from './rows.tsx'
 import { actorName, localized, readableMarkers, reasonLabel, valueLabel, when } from './text.ts'
@@ -154,6 +155,7 @@ export function TicketPage({ id }: { id: string }) {
     {data.deliveryError && <p className="dt-banner dt-danger dt-mono">
       <span className="dt-banner-label">{t('deliveryFailedPrefix')}</span>{data.deliveryError}
     </p>}
+    <RoutingGraph graph={data.routing} />
     <MandateDetails ticket={data} actor={actor} />
     <JiraTicketSync id={id} jira={data.jira} available={!!data.jiraSync} reload={reload} />
     {undelivered.length > 0 && <Section title={t('undeliveredInputs')} count={undelivered.length}>
