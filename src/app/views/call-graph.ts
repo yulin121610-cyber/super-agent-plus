@@ -41,6 +41,16 @@ export type CallGraphWorker = {
   kind: 'worker'
   ticketId: string
   title: string
+  /**
+   * What this Ticket is doing, as a short excerpt: the Mandate scope, else the assignment text, else a hand-back this
+   * Ticket recorded, else its latest human input, else the title.
+   */
+  work: string
+  workFrom: 'scope' | 'assignment' | 'handback' | 'input' | 'title'
+  /** A hand-back this Ticket recorded, when the goal above does not already say it. */
+  detail?: { kind: 'handback'; text: string }
+  /** Set only when the Ticket recorded an access; a missing one is not shown as write. */
+  access?: 'read-only' | 'write'
   focus: boolean
   /** Every Thread in scope that subscribes this Ticket does so for context only. */
   context: boolean
@@ -182,9 +192,9 @@ export function callGraph(view: Snapshot, focus: { ticketId?: string; threadKey?
     const ticket = store.tickets.get(ticketId)
     if (!ticket) return undefined
     const id = `worker:${ticketId}`
-    if (!workers.has(id)) workers.set(id, { id, kind: 'worker', ticketId, title: ticket.title, focus: ticketId === focus.ticketId,
-      context: contextOnly(ticketId, threadKeys, threadOf), createdAt: ticket.createdAt, state: liveTicket(ticket) ? 'open' : 'ended',
-      ended: ticket.ended, ...ticketStage(ticket) })
+    if (!workers.has(id)) workers.set(id, { id, kind: 'worker', ticketId, title: ticket.title, ...workerWork(store, ticket),
+      focus: ticketId === focus.ticketId, context: contextOnly(ticketId, threadKeys, threadOf), createdAt: ticket.createdAt,
+      state: liveTicket(ticket) ? 'open' : 'ended', ended: ticket.ended, ...ticketStage(ticket) })
     return id
   }
   if (focus.ticketId) workerId(focus.ticketId)
@@ -263,6 +273,37 @@ export function callGraph(view: Snapshot, focus: { ticketId?: string; threadKey?
     edges: [...edges.values()].sort((a, b) => kindOrder(a) - kindOrder(b) || a.id.localeCompare(b.id)) }
 }
 
+const WORK = 80
+/** The line that tells two Tickets on one Thread apart: the goal first, then what this Ticket itself did with a message. */
+function workerWork(store: Snapshot['store'], ticket: Ticket): Pick<CallGraphWorker, 'work' | 'workFrom' | 'detail' | 'access'> {
+  const scope = preview(ticket.mandate.scope, WORK)
+  const assignment = preview(ticket.execution?.assignment ?? '', WORK)
+  const handback = latestHandback(store, ticket)
+  const input = latestInput(store, ticket)
+  const access = ticket.execution?.access
+  const marked = access ? { access } : {}
+  if (scope) return { ...marked, work: scope, workFrom: 'scope', ...handback && handback !== scope ? { detail: { kind: 'handback' as const, text: handback } } : {} }
+  if (assignment) return { ...marked, work: assignment, workFrom: 'assignment', ...handback && handback !== assignment ? { detail: { kind: 'handback' as const, text: handback } } : {} }
+  if (handback) return { ...marked, work: handback, workFrom: 'handback' }
+  if (input) return { ...marked, work: input, workFrom: 'input' }
+  return { ...marked, work: ticket.title, workFrom: 'title' }
+}
+function latestHandback(store: Snapshot['store'], ticket: Ticket): string {
+  let found: { reason: string; at: string } | undefined
+  for (const input of ticket.inputs) if (input.kind === 'trigger') for (const item of store.triggers.disposition(input.triggerId)?.handbacks ?? []) {
+    if (item.ticketId === ticket.id && (!found || item.at >= found.at)) found = item
+  }
+  return found ? preview(found.reason, WORK) : ''
+}
+function latestInput(store: Snapshot['store'], ticket: Ticket): string {
+  for (const input of [...ticket.inputs].reverse()) {
+    if ((input.kind === 'text' || input.kind === 'note') && preview(input.text, WORK)) return preview(input.text, WORK)
+    if (input.kind !== 'trigger') continue
+    const trigger = store.triggers.get(input.triggerId)
+    if (trigger?.human && preview(trigger.text, WORK)) return preview(trigger.text, WORK)
+  }
+  return ''
+}
 const triggerNode = (id: string) => `trigger:${id}`
 function homeOf(trigger: Trigger, threadKeys: Set<string>): string {
   const keys = trigger.threads.map(threadKey)

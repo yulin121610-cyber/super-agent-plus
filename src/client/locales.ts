@@ -707,6 +707,8 @@ const TEXT = {
   routingReturned: ['已交回，等待评估', 'Handed back, waiting for Eval'],
   routingAlso: ['也订阅这个讨论', 'Also subscribed'],
   routingCurrent: ['当前工单', 'This Ticket'],
+  routingReadOnly: ['只读排查', 'Read-only'],
+  routingWrite: ['修改仓库', 'Write'],
   routingBatch: ['同批还有 {count} 条触发', '{count} more Triggers in this Eval'],
   routingOmitted: ['还有 {count} 条后续反馈未画出。', '{count} later inputs are not drawn.'],
   routingMulti: ['一个讨论可以有多个工单订阅。', 'One discussion can subscribe several Tickets.'],

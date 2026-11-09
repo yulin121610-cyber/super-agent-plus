@@ -94,7 +94,7 @@ function Arrow({ edge }: { edge: Edge }) {
 function GraphNode({ node }: { node: Node }) {
   const { t, navigate } = usePanel()
   const title = node.kind === 'trigger' ? readableMarkers(t, node.preview) || t('empty')
-    : node.kind === 'worker' ? node.title
+    : node.kind === 'worker' ? node.workFrom === 'handback' ? t('routingHandbackReason', { reason: node.work }) : node.work
     : node.outcome ? decisionMark(t, node.outcome).label
     : node.returned ? t('routingReturned')
     : node.pending === 'evaluating' ? t('dispositionEvaluating') : t('dispositionQueued')
@@ -105,8 +105,10 @@ function GraphNode({ node }: { node: Node }) {
   }
   const reason = node.kind === 'router' && node.reason?.length ? reasonLabel(t, node.reason) : ''
   const mark = node.kind === 'worker' ? ticketMark(t, node) : undefined
+  const tip = node.kind === 'worker' ? `${title}\n${node.title}\n${node.ticketId}` : title
   return <div className="dt-route-node" data-kind={node.kind} {...node.kind === 'worker' && node.focus ? { 'data-current': 'true' } : {}}>
-    <button type="button" className="dt-route-node-title" title={title} onClick={go}>{title}</button>
+    <button type="button" className="dt-route-node-title" title={tip} onClick={go}>{title}</button>
+    {node.kind === 'worker' && node.title !== node.work && <span className="dt-route-node-sub">{node.title}</span>}
     <div className="dt-row-meta">
       {node.kind === 'trigger' && <span>{actorName(t, node.actor)}</span>}
       {node.kind === 'trigger' && <When at={node.at} />}
@@ -114,10 +116,12 @@ function GraphNode({ node }: { node: Node }) {
       {node.kind === 'trigger' && node.pending === 'evaluating' && <Tag tone="info">{t('dispositionEvaluating')}</Tag>}
       {node.kind === 'router' && node.at && <When at={node.at} />}
       {mark && <Tag tone={mark.tone}>{mark.label}</Tag>}
+      {node.kind === 'worker' && node.access && <Tag tone={node.access === 'read-only' ? 'quiet' : 'success'}>{t(node.access === 'read-only'
+        ? 'routingReadOnly' : 'routingWrite')}</Tag>}
       {node.kind === 'worker' && node.focus && <Tag tone="info">{t('routingCurrent')}</Tag>}
       {node.kind === 'worker' && node.context && <Tag tone="quiet" title={t('contextOnlyHint')}>{t('contextOnly')}</Tag>}
-      {node.kind === 'worker' && <span className="dt-mono">{node.ticketId.slice(0, 8)}</span>}
     </div>
+    {node.kind === 'worker' && node.detail?.kind === 'handback' && <Hint>{t('routingHandbackReason', { reason: node.detail.text })}</Hint>}
     {reason && <Hint>{reason}</Hint>}
   </div>
 }

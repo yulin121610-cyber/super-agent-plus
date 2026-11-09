@@ -123,10 +123,10 @@ it('draws subscription passthrough for the thread, including every subscribed ti
       nodes: [
         { id: 'trigger:f3', kind: 'trigger', role: 'feedback', triggerId: 'f3', at: '2026-11-09T16:00:00.000Z', preview: '合并到dev',
           actor: { source: 'feishu', id: 'ou_alice', name: { zh: 'Alice', en: 'Alice' } }, human: true, thread: threadSummary().key },
-        { id: 'worker:A', kind: 'worker', ticketId: 't1', title: '修复回归', focus: false, context: false, createdAt: '2026-09-22T00:00:00.000Z',
-          state: 'open', ended: undefined, stage: 'working' },
-        { id: 'worker:B', kind: 'worker', ticketId: 't2', title: '写工单', focus: false, context: false, createdAt: '2026-11-06T15:10:00.000Z',
-          state: 'open', ended: undefined, stage: 'working' },
+        { id: 'worker:A', kind: 'worker', ticketId: 't1', title: '修复回归', work: '排查生产问题', workFrom: 'scope', focus: false, context: false,
+          createdAt: '2026-09-22T00:00:00.000Z', state: 'open', ended: undefined, stage: 'working' },
+        { id: 'worker:B', kind: 'worker', ticketId: 't2', title: '写工单', work: '写代码改仓库', workFrom: 'scope', focus: false, context: false,
+          createdAt: '2026-11-06T15:10:00.000Z', state: 'open', ended: undefined, stage: 'working' },
       ],
       edges: [
         { id: 'e8', kind: 'fanout', from: 'trigger:f3', to: 'worker:A', triggerId: 'f3', ticketId: 't1' },
@@ -138,7 +138,9 @@ it('draws subscription passthrough for the thread, including every subscribed ti
   expect(text()).toContain(zh.routingPassthrough)
   expect(text()).toContain('合并到dev')
   expect(text()).toContain(zh.routingMulti)
-  await click('修复回归')
+  expect(text()).toContain('排查生产问题')
+  expect(text()).toContain('写代码改仓库')
+  await click('排查生产问题')
   expect(server.requests.some(request => request.path === 'tickets/t1')).toBe(true)
 })
 

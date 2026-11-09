@@ -229,10 +229,11 @@ const sampleRouting = (): TicketPageView['routing'] => ({
       thread: 'feishu:topic', triggerIds: ['r1'] },
     { id: 'router:dB', kind: 'router', decisionId: 'dB', outcome: 'accept', reason: [{ code: 'explicitRouted' }], at: '2026-11-06T15:10:00.000Z',
       thread: 'feishu:topic', triggerIds: ['f2'] },
-    { id: 'worker:A', kind: 'worker', ticketId: 't1', title: '排查工单', focus: true, context: false, createdAt: '2026-11-06T13:20:00.000Z',
+    { id: 'worker:A', kind: 'worker', ticketId: 't1', title: '排查工单', work: '排查生产问题', workFrom: 'scope', access: 'read-only',
+      detail: { kind: 'handback', text: '超出只读' }, focus: true, context: false, createdAt: '2026-11-06T13:20:00.000Z',
       state: 'open', ended: undefined, stage: 'working' },
-    { id: 'worker:B', kind: 'worker', ticketId: 'tB', title: '写工单', focus: false, context: false, createdAt: '2026-11-06T15:10:00.000Z',
-      state: 'open', ended: undefined, stage: 'working' },
+    { id: 'worker:B', kind: 'worker', ticketId: 'tB', title: '写工单', work: '写代码改仓库', workFrom: 'scope', access: 'write',
+      focus: false, context: false, createdAt: '2026-11-06T15:10:00.000Z', state: 'open', ended: undefined, stage: 'working' },
   ],
   edges: [
     { id: 'e1', kind: 'evaluate', from: 'trigger:r1', to: 'router:dA', triggerId: 'r1' },
@@ -262,8 +263,13 @@ it('draws how the ticket was routed and refreshes that graph while the page is o
   expect(text()).toContain(zh.routingHandbackGroup)
   expect(text()).toContain(zh.routingHandbackReason.replace('{reason}', '超出只读'))
   expect(text()).toContain(zh.routingMulti)
+  expect(text()).toContain('排查生产问题')
+  expect(text()).toContain('写代码改仓库')
+  expect(text()).toContain(zh['stage.working'])
+  expect(text()).toContain(zh.routingReadOnly)
+  expect(text()).toContain(zh.routingWrite)
   expect(text()).not.toContain('合并到dev')
-  await click('写工单')
+  await click('写代码改仓库')
   expect(server.requests.some(request => request.path === 'tickets/tB')).toBe(true)
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('写工单')
   at({ page: 'execution', id: 't1' })
@@ -271,6 +277,10 @@ it('draws how the ticket was routed and refreshes that graph while the page is o
   expect(text()).toContain(en.routingPassthrough)
   expect(text()).toContain(en.routingHandbackReason.replace('{reason}', '超出只读'))
   expect(text()).toContain(en.routingMulti)
+  expect(text()).toContain('排查生产问题')
+  expect(text()).toContain('写代码改仓库')
+  expect(text()).toContain(en['stage.working'])
+  expect(text()).toContain(en.routingReadOnly)
   const routing = sampleRouting()
   server.ticketDetails.t1 = { ...server.ticketDetails.t1!, routing: { ...routing,
     nodes: [...routing.nodes, { id: 'trigger:f3', kind: 'trigger', role: 'feedback', triggerId: 'f3', at: '2026-11-09T16:00:00.000Z',

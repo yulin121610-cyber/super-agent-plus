@@ -30,8 +30,11 @@ function host() {
 const view = (): Snapshot => snapshot(host())
 const mandate = { strength: 'explicit' as const, policyVersion: 'v', basis: { via: 'listed' as const },
   actor: { source: 'feishu', id: 'ou_alice' }, scope: '' }
-function ticket(id: string, title: string, decisionId: string, origin: string, at: string, inputs: TicketInput[] = []) {
-  const saved: Ticket = { id, title, decisionId, channels: [], undelivered: [], createdAt: at, updatedAt: at, mandate,
+function ticket(id: string, title: string, decisionId: string, origin: string, at: string, inputs: TicketInput[] = [],
+  extra: { scope?: string; assignment?: string; access?: 'read-only' | 'write' } = {}) {
+  const saved: Ticket = { id, title, decisionId, channels: [], undelivered: [], createdAt: at, updatedAt: at,
+    mandate: { ...mandate, scope: extra.scope ?? '' },
+    ...extra.assignment || extra.access ? { execution: { name: id, directory: '/w', assignment: extra.assignment ?? '', ...extra.access ? { access: extra.access } : {} } } : {},
     origin: { triggerId: origin, triggerIds: [origin] }, assignments: [{ id: `a-${id}`, state: 'running', createdAt: at, startedAt: at }],
     inputs }
   store.tickets.save(saved)
@@ -82,8 +85,10 @@ function sample() {
     reason: [{ code: 'explicitRouted' }], strength: 'explicit' })
   const input = (id: string, triggerId: string, at: string, context = false): TicketInput =>
     ({ id, kind: 'trigger', triggerId, at, human: true, ...context ? { context: true as const } : {} })
-  ticket('A', '排查工单', 'dA', 'R1', tAcceptA, [input('i1', 'F1', tWhy), input('i2', 'F2', tBranch), input('i3', 'F3', tPush), input('i4', 'F4', tJira)])
-  ticket('B', '写工单', 'dB', 'F2', tAcceptB, [input('j3', 'F3', tPush), input('j4', 'F4', tJira)])
+  ticket('A', '排查工单', 'dA', 'R1', tAcceptA, [input('i1', 'F1', tWhy), input('i2', 'F2', tBranch), input('i3', 'F3', tPush), input('i4', 'F4', tJira)],
+    { scope: '排查生产问题', access: 'read-only' })
+  ticket('B', '写工单', 'dB', 'F2', tAcceptB, [input('j3', 'F3', tPush), input('j4', 'F4', tJira)],
+    { scope: '写代码改仓库', access: 'write' })
   thread(topic, 'topic', ['A', 'B'], { label: '生产问题' })
   message('noise', 'filtered', tReport)
   store.triggers.saveDisposition('noise', { filtered: { code: 'not_a_member' }, fanout: [], at: tReport })
@@ -99,7 +104,8 @@ it('draws the initial report, passthrough, hand-back and the second ticket on th
   expect(triggerNode(graph.nodes, 'F2')).toMatchObject({ role: 'feedback' })
   expect(triggerNode(graph.nodes, 'noise')).toBeUndefined()
   expect(graph.nodes.filter(node => node.kind === 'router').map(node => node.decisionId).sort()).toEqual(['dA', 'dB'])
-  expect(graph.nodes.filter(node => node.kind === 'worker').map(node => [node.ticketId, node.focus])).toEqual([['A', true], ['B', false]])
+  expect(graph.nodes.filter(node => node.kind === 'worker').map(node => [node.ticketId, node.focus, node.work, node.workFrom, node.access,
+    node.detail?.text])).toEqual([['A', true, '排查生产问题', 'scope', 'read-only', '超出只读'], ['B', false, '写代码改仓库', 'scope', 'write', undefined]])
   expect(edge(graph, 'evaluate', { triggerId: 'R1', to: 'router:dA' })).toBeTruthy()
   expect(edge(graph, 'accept', { decisionId: 'dA', ticketId: 'A' })).toBeTruthy()
   expect(edge(graph, 'fanout', { triggerId: 'R1' })).toBeUndefined()
@@ -165,6 +171,27 @@ it('sends a hand-back to the pending router until a later decision takes it', ()
   const returned = callGraph(view(), { ticketId: 'A' })
   expect(returned.nodes.find(node => node.kind === 'router' && node.id === `router:pending:${topic}`)).toMatchObject({ returned: true })
   expect(returned.nodes.find(node => node.kind === 'router' && node.id === `router:pending:${topic}`)).not.toHaveProperty('pending')
+})
+
+it('names each worker by its own goal, then by what that ticket did, when the titles match', () => {
+  message('R', '请看一下', tReport)
+  message('M', '把按钮改成蓝色', tWhy)
+  store.triggers.saveDisposition('R', { fanout: [], decisionId: 'd', at: tReport })
+  store.triggers.saveDisposition('M', { fanout: ['I', 'H'], handbacks: [{ ticketId: 'H', reason: '超出只读', at: tHandback }], at: tWhy })
+  store.decisions.save({ id: 'd', evalId: 'e', threadKey: topic, triggerIds: ['R'], policyVersion: 'v', at: tAcceptA, kind: 'accept',
+    reason: [{ code: 'explicitRouted' }], strength: 'explicit', ticketId: 'S' })
+  const heard = (id: string): TicketInput => ({ id: `i-${id}`, kind: 'trigger', triggerId: 'M', at: tWhy, human: true })
+  ticket('S', '工单', 'd', 'R', tAcceptA, [], { scope: '排查生产问题', assignment: '不要用这段派工' })
+  ticket('G', '工单', 'd', 'R', tAcceptA, [heard('G')], { assignment: '写代码改仓库' })
+  ticket('I', '工单', 'd', 'R', tAcceptA, [heard('I')])
+  ticket('H', '工单', 'd', 'R', tAcceptA, [heard('H')])
+  thread(topic, 'topic', ['S', 'G', 'I', 'H'])
+  const work = (id: string) => callGraph(view(), { threadKey: topic }).nodes.find(node => node.kind === 'worker' && node.ticketId === id)
+  expect(work('S')).toMatchObject({ work: '排查生产问题', workFrom: 'scope', title: '工单' })
+  expect(work('S')).not.toHaveProperty('detail')
+  expect(work('G')).toMatchObject({ work: '写代码改仓库', workFrom: 'assignment' })
+  expect(work('I')).toMatchObject({ work: '把按钮改成蓝色', workFrom: 'input' })
+  expect(work('H')).toMatchObject({ work: '超出只读', workFrom: 'handback' })
 })
 
 it('keeps human later inputs ahead of newer bot traffic', () => {
