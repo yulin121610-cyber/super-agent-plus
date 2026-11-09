@@ -1,6 +1,7 @@
-/** Thread detail page: Trigger timeline with gap-free pagination, Decisions, subscribed Tickets, and correlated Threads. */
+/** Thread detail page: live routing graph, Trigger timeline, Decisions, subscribed Tickets, and correlated Threads. */
 import { useEffect, useState, type ReactNode } from 'react'
 import { ApiError, usePoll, type ThreadPageView, type TriggerRow } from './api.ts'
+import { RoutingGraph } from './call-graph.tsx'
 import { Button, DisclosureRow, Icon, Tag } from './controls.tsx'
 import { decisionMark } from './marks.ts'
 import { useAction, usePanel } from './provider.tsx'
@@ -137,6 +138,7 @@ export function ThreadPage({ id, target }: { id: string; target?: string }) {
         deadline: when(data.evaluating.deadline, t('lang')) })}
     </p>}
     {data.pollError && <p className="dt-error dt-clamp">{t('pollFailed', { error: data.pollError })}</p>}
+    <RoutingGraph graph={data.routing} />
     {data.tickets.length > 0 && <Section title={t('subscribedTickets')} count={data.tickets.length}>
       <ul className="dt-list">{data.tickets.map(ticket => <TicketLine key={ticket.id} ticket={ticket}
         context={data.context.includes(ticket.id)} />)}</ul>

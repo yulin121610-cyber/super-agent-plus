@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 // The Execution status, a Ticket, and the Execution settings.
 import { act } from 'react'
-import { expect, it } from 'vitest'
+import { expect, it, onTestFinished, vi } from 'vitest'
+import type { TicketPageView } from '../src/client/api.ts'
 import { en, zh } from '../src/client/locales.ts'
-import { usePanel, mount, remount, all, find, tab, click, type, text, field, at } from './fixtures/panel.tsx'
-import { MEMBER, server, ticketSummary, threadSummary } from './fixtures/panel-server.ts'
+import { usePanel, mount, remount, settle, all, find, tab, click, type, text, field, at } from './fixtures/panel.tsx'
+import { MEMBER, actor, emptyRouting, server, ticketSummary, threadSummary } from './fixtures/panel-server.ts'
 
 usePanel()
 it('lists Tickets under Execution by who they wait on, with the Executor state and its pause as an action', async () => {
@@ -212,6 +213,73 @@ it('words an ended Ticket by its outcome, on its row and its page, with a person
     reason: '不需要了' } }
   await remount(en)
   expect(all('.dt-hint').map(hint => hint.textContent).find(line => line?.includes(en['outcome.stopped']))).toMatch(/Stopped by a person: 不需要了$/)
+})
+
+const sampleRouting = (): TicketPageView['routing'] => ({
+  threads: [{ key: 'feishu:topic', source: 'feishu', title: '生产问题', subscriptions: 2 }],
+  multiTicket: true, omitted: 0,
+  nodes: [
+    { id: 'trigger:r1', kind: 'trigger', role: 'origin', triggerId: 'r1', at: '2026-11-06T13:19:00.000Z', preview: '排查这个生产问题',
+      actor: actor('feishu', MEMBER), human: true, thread: 'feishu:topic' },
+    { id: 'trigger:f1', kind: 'trigger', role: 'feedback', triggerId: 'f1', at: '2026-11-06T14:00:00.000Z', preview: '为什么是114219',
+      actor: actor('feishu', MEMBER), human: true, thread: 'feishu:topic' },
+    { id: 'trigger:f2', kind: 'trigger', role: 'feedback', triggerId: 'f2', at: '2026-11-06T15:00:00.000Z', preview: '从 master 拉分支',
+      actor: actor('feishu', MEMBER), human: true, thread: 'feishu:topic' },
+    { id: 'router:dA', kind: 'router', decisionId: 'dA', outcome: 'accept', reason: [{ code: 'explicitRouted' }], at: '2026-11-06T13:20:00.000Z',
+      thread: 'feishu:topic', triggerIds: ['r1'] },
+    { id: 'router:dB', kind: 'router', decisionId: 'dB', outcome: 'accept', reason: [{ code: 'explicitRouted' }], at: '2026-11-06T15:10:00.000Z',
+      thread: 'feishu:topic', triggerIds: ['f2'] },
+    { id: 'worker:A', kind: 'worker', ticketId: 't1', title: '排查工单', focus: true, context: false, createdAt: '2026-11-06T13:20:00.000Z',
+      state: 'open', ended: undefined, stage: 'working' },
+    { id: 'worker:B', kind: 'worker', ticketId: 'tB', title: '写工单', focus: false, context: false, createdAt: '2026-11-06T15:10:00.000Z',
+      state: 'open', ended: undefined, stage: 'working' },
+  ],
+  edges: [
+    { id: 'e1', kind: 'evaluate', from: 'trigger:r1', to: 'router:dA', triggerId: 'r1' },
+    { id: 'e2', kind: 'accept', from: 'router:dA', to: 'worker:A', decisionId: 'dA', ticketId: 't1' },
+    { id: 'e3', kind: 'fanout', from: 'trigger:f1', to: 'worker:A', triggerId: 'f1', ticketId: 't1' },
+    { id: 'e4', kind: 'fanout', from: 'trigger:f2', to: 'worker:A', triggerId: 'f2', ticketId: 't1' },
+    { id: 'e5', kind: 'handback', from: 'worker:A', to: 'router:dB', triggerId: 'f2', ticketId: 't1', reason: '超出只读', at: '2026-11-06T15:05:00.000Z' },
+    { id: 'e6', kind: 'evaluate', from: 'trigger:f2', to: 'router:dB', triggerId: 'f2' },
+    { id: 'e7', kind: 'accept', from: 'router:dB', to: 'worker:B', decisionId: 'dB', ticketId: 'tB' },
+  ],
+})
+it('draws how the ticket was routed and refreshes that graph while the page is open', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  onTestFinished(() => { vi.useRealTimers() })
+  const base = server.ticketDetails.t1!
+  server.ticketDetails.tB = { ...base, id: 'tB', title: '写工单', routing: emptyRouting() }
+  server.ticketDetails.t1 = { ...base, routing: sampleRouting() }
+  at({ page: 'execution', id: 't1' })
+  await mount()
+  expect(text()).toContain(zh.routingInitial)
+  expect(text()).toContain('排查这个生产问题')
+  expect(text()).toContain(zh.routingEvaluate)
+  expect(text()).toContain(zh.routingAccept)
+  expect(text()).toContain(zh.routingFeedback)
+  expect(text()).toContain(zh.routingPassthrough)
+  expect(text()).toContain('为什么是114219')
+  expect(text()).toContain(zh.routingHandbackGroup)
+  expect(text()).toContain(zh.routingHandbackReason.replace('{reason}', '超出只读'))
+  expect(text()).toContain(zh.routingMulti)
+  expect(text()).not.toContain('合并到dev')
+  await click('写工单')
+  expect(server.requests.some(request => request.path === 'tickets/tB')).toBe(true)
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('写工单')
+  at({ page: 'execution', id: 't1' })
+  await remount(en)
+  expect(text()).toContain(en.routingPassthrough)
+  expect(text()).toContain(en.routingHandbackReason.replace('{reason}', '超出只读'))
+  expect(text()).toContain(en.routingMulti)
+  const routing = sampleRouting()
+  server.ticketDetails.t1 = { ...server.ticketDetails.t1!, routing: { ...routing,
+    nodes: [...routing.nodes, { id: 'trigger:f3', kind: 'trigger', role: 'feedback', triggerId: 'f3', at: '2026-11-09T16:00:00.000Z',
+      preview: '合并到dev', actor: actor('feishu', MEMBER), human: true, thread: 'feishu:topic' }],
+    edges: [...routing.edges,
+      { id: 'e8', kind: 'fanout', from: 'trigger:f3', to: 'worker:A', triggerId: 'f3', ticketId: 't1' },
+      { id: 'e9', kind: 'fanout', from: 'trigger:f3', to: 'worker:B', triggerId: 'f3', ticketId: 'tB' }] } }
+  await act(async () => { await vi.advanceTimersByTimeAsync(5000) }); await settle()
+  expect(text()).toContain('合并到dev')
 })
 
 it('sends one stop for a double click on Confirm', async () => {

@@ -205,6 +205,7 @@ const overviewView = (): ApiResponse<'GET overview'> => {
     policyVersion: 'abcdef1234567890',
   }
 }
+export const emptyRouting = (): TicketPageView['routing'] => ({ threads: [], multiTicket: false, omitted: 0, nodes: [], edges: [] })
 export const acceptDecision = (): NonNullable<TicketPageView['decision']> => ({ id: 'd1', kind: 'accept', outcome: 'accept',
   reason: [{ code: 'explicitRouted' }], at: '2026-09-22T00:00:00Z', strength: 'explicit', ticketId: undefined,
   triggerIds: ['e1'], thread: 'feishu:oc_1:om_root', rules: [], preview: '@bot 修一下', ticketTitle: undefined })
@@ -224,11 +225,12 @@ const ticketDetail = (): TicketPageView => ({
   inputs: [{ id: 'i1', kind: 'trigger', triggerId: 'e2', at: '2026-09-22T00:03:00Z', delivered: false,
     trigger: { id: 'e2', actor: actor('feishu', MEMBER), human: true, preview: '顺便改标题', thread: 'feishu:oc_1:om_root' } },
   { id: 'i2', kind: 'policy-changed', at: '2026-09-22T00:04:00Z', delivered: true, from: 'aaaaaaaaaaaaaaaa', to: 'bbbbbbbbbbbbbbbb' }],
+  routing: emptyRouting(),
 })
 function threadPage(key: string, { before, around }: { before?: string; around?: string }): ThreadPageView | undefined {
   if (key !== threadSummary().key) return undefined
   const base = { ...threadSummary(), tickets: [ticketSummary()], correlated: [{ key: 'github:42', title: 'PR 42' }], decisions: [],
-    url: 'https://example.test/thread', context: [] }
+    url: 'https://example.test/thread', context: [], routing: emptyRouting() }
   const decision = { id: 'd1', outcome: 'accept' as const, reason: [{ code: 'said', values: { text: 'x' } }], ticketId: 't1' }
   if (before === 'cursor-1' || around === 'e1') return { ...base, timeline: [trigger('e1', '2026-09-20T00:00:00Z',
     { disposition: { decision } })], earlier: null }

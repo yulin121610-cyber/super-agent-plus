@@ -2,6 +2,7 @@
 import { threadKey, type Thread, type Ticket, type Trigger } from '../../core/index.ts'
 import type { ThreadFilter } from '../api.ts'
 import type { TextCache } from '../cache.ts'
+import { callGraph } from './call-graph.ts'
 import { awaitingEval, channelLink, dayAgo, decisionView, newestFirst, page, snapshot, threadSummary, threadTitle, ticketLine,
   ticketSummary, triggerView, type ViewHost } from './records.ts'
 import { attribute } from './text.ts'
@@ -49,7 +50,8 @@ export function threadDetail(host: ViewHost, key: string, before: string | undef
     }),
     tickets: thread.subscriptions.flatMap(id => { const ticket = store.tickets.get(id); return ticket ? [ticketLine(view, ticket)] : [] }),
     decisions: decisions.slice().reverse().map(decision => decisionView(view, decision)),
-    timeline: shown.map(trigger => triggerView(view, trigger, decisions)), earlier: more ? `${shown[0]!.at}|${shown[0]!.id}` : null }
+    timeline: shown.map(trigger => triggerView(view, trigger, decisions)), earlier: more ? `${shown[0]!.at}|${shown[0]!.id}` : null,
+    routing: callGraph(view, { threadKey: key }) }
 }
 export type ThreadDetailView = NonNullable<ReturnType<typeof threadDetail>>
 /**
